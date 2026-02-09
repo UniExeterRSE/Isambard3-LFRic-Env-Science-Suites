@@ -129,8 +129,12 @@
 
     [[ISAMBARD3]]
         pre-script = """
-                        if [ -n "{{ SPACK_SETUP }}" ]; then
-                          source "{{ SPACK_SETUP }}"
+                        spack_setup="{{ SPACK_SETUP }}"
+                        if [ -z "$spack_setup" ]; then
+                          spack_setup="${ROSE_SUITE_DIR}/../../env_lfric/working_dir/spack/share/spack/setup-env.sh"
+                        fi
+                        if [ -n "$spack_setup" ] && [ -f "$spack_setup" ]; then
+                          source "$spack_setup"
                           spack env activate -p "{{ SPACK_ENV }}"
                           spack load metomi-rose cylc-flow cylc-rose || true
                         fi
