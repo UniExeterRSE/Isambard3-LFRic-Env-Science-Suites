@@ -1,0 +1,15 @@
+[file:bin/tweak_iodef]
+mode=auto
+source=git:https://github.com/MetOffice/lfric_core.git::bin/tweak_iodef::main
+
+[file:bin/get_git_sources.py]
+source=git:localmirrors:MetOffice/SimSys_Scripts.git::github_scripts/get_git_sources.py::suite_merge_script
+
+[file:bin/merge_sources.py]
+source=git:localmirrors:MetOffice/SimSys_Scripts.git::github_scripts/merge_sources.py::suite_merge_script
+
+[template variables]
+EX_HOST="exab"
+MIRROR_LOC="localmirrors:"
+USE_MIRRORS=true
+USE_TOKENS=false

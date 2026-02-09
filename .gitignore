@@ -1,0 +1,16 @@
+# Runtime/build artifacts
+working_dir/
+env_lfric/working_dir/
+**/working_dir/
+
+# Logs and batch output
+*.log
+*.out
+*.err
+*.slurm
+
+# Editor/OS cruft
+*~
+*.swp
+*.swo
+.DS_Store
