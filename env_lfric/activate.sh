@@ -86,4 +86,43 @@ export CORE_ROOT_DIR="${CORE_ROOT_DIR:-$WORKING_DIR/lfric_core}"
 export LFRIC_TARGET_PLATFORM="${LFRIC_TARGET_PLATFORM:-meto-spice}"
 export FPP="${FPP:-cpp -traditional-cpp}"
 
+# Configure the default Cylc run location to live one level above activate.sh.
+CYLC_RUN_BASE_DEFAULT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+export CYLC_RUN_BASE="${CYLC_RUN_BASE:-$CYLC_RUN_BASE_DEFAULT}"
+CYLC_USER_CONF="${CYLC_USER_CONF:-$HOME/.cylc/flow/global.cylc}"
+CYLC_USER_CONF_DIR="$(dirname "$CYLC_USER_CONF")"
+CYLC_RUN_BLOCK_START="# BEGIN LFRIC_CYLC_RUN_DIR"
+CYLC_RUN_BLOCK_END="# END LFRIC_CYLC_RUN_DIR"
+
+mkdir -p "$CYLC_USER_CONF_DIR"
+if [ ! -f "$CYLC_USER_CONF" ]; then
+  : > "$CYLC_USER_CONF"
+fi
+
+if grep -q "$CYLC_RUN_BLOCK_START" "$CYLC_USER_CONF" 2>/dev/null; then
+  awk -v start="$CYLC_RUN_BLOCK_START" -v end="$CYLC_RUN_BLOCK_END" -v run="$CYLC_RUN_BASE" '
+    $0 == start {
+      inblock=1
+      print
+      print "[install]"
+      print "    [[symlink dirs]]"
+      print "        [[[localhost]]]"
+      print "            run = " run
+      next
+    }
+    $0 == end { inblock=0; print; next }
+    !inblock { print }
+  ' "$CYLC_USER_CONF" > "$CYLC_USER_CONF.tmp" && mv "$CYLC_USER_CONF.tmp" "$CYLC_USER_CONF"
+else
+  cat >> "$CYLC_USER_CONF" <<EOF
+
+$CYLC_RUN_BLOCK_START
+[install]
+    [[symlink dirs]]
+        [[[localhost]]]
+            run = $CYLC_RUN_BASE
+$CYLC_RUN_BLOCK_END
+EOF
+fi
+
 hash -r
