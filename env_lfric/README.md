@@ -25,16 +25,6 @@ The bundle pulls packages from the Met Office `simit-spack` repo (for example
 `cylc-rose`). MPI is pinned to `mpich` and Python to `3.11` to match the LFRic
 environment.
 
-## Filename Changes (New Script Names)
-
-If you have older notes or links, the key scripts now live under these names:
-
-- `driver_rose_clyc.sh` -> `install.sh`
-- `driver_rose_clyc_gui.sh` -> `compute_node_install.slurm` (Slurm wrapper)
-- `rose_cylc_spack_env_check.sh` -> `verification.sh`
-
-The functionality is the same, but the names match how they are used now.
-
 ## Install (Login Node)
 
 The end-to-end installer clones source repos, builds the Spack environment
