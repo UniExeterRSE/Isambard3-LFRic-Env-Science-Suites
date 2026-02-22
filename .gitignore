@@ -7,6 +7,7 @@ env_lfric/working_dir/
 *.log
 *.out
 *.err
+*.slurm
 
 # Editor/OS cruft
 *~
