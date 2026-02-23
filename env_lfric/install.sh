@@ -214,11 +214,22 @@ clone_or_update() {
   local ref="${3:-}"
   local depth="${4:-}"
   local path="$WORKING_DIR/$name"
+  local ref_is_commit=0
+  local clone_depth="$depth"
+
+  if [ -n "$ref" ] && [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+    ref_is_commit=1
+    clone_depth=""
+  fi
 
   if [ -d "$path/.git" ]; then
     info "$name already present."
     if [ "$UPDATE_REPOS" = "1" ]; then
       git -C "$path" fetch --tags --prune
+      if [ "$ref_is_commit" -eq 1 ] \
+        && git -C "$path" rev-parse --is-shallow-repository 2>/dev/null | grep -q true; then
+        git -C "$path" fetch --unshallow || git -C "$path" fetch --depth=1000000
+      fi
       if [ -n "$ref" ]; then
         git -C "$path" checkout "$ref" || true
       fi
@@ -234,8 +245,8 @@ clone_or_update() {
 
   if [ -n "$ref" ] && git ls-remote --exit-code --heads --tags "$url" "$ref" >/dev/null 2>&1; then
     local clone_cmd=(git clone --branch "$ref")
-    if [ -n "$depth" ]; then
-      clone_cmd+=(--depth "$depth")
+    if [ -n "$clone_depth" ]; then
+      clone_cmd+=(--depth "$clone_depth")
     fi
     clone_cmd+=("$url" "$path")
     if ! "${clone_cmd[@]}"; then
@@ -243,8 +254,8 @@ clone_or_update() {
     fi
   else
     local clone_cmd=(git clone)
-    if [ -n "$depth" ]; then
-      clone_cmd+=(--depth "$depth")
+    if [ -n "$clone_depth" ]; then
+      clone_cmd+=(--depth "$clone_depth")
     fi
     clone_cmd+=("$url" "$path")
     if ! "${clone_cmd[@]}"; then
