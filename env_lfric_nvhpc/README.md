@@ -84,7 +84,8 @@ suite without touching the Spack env. See `rose/README.md` for details.
 
 Common overrides:
 
-- Default compiler is GNU12 (`gcc@12.3.0`) to match the cluster-tested setup.
+- Default compiler is NVHPC (`nvhpc`) for testing LFRic with the NVIDIA toolchain.
+- `BOOTSTRAP_COMPILER_SPEC=gcc@12.3.0` is used to install NVHPC via Spack.
 - `WORKING_DIR=/path/to/working_dir`
 - `USE_GITHUB_SSH=0|1` (default: `1`)
 - `LFRIC_APPS_REF=e906813e45406163723ad697584b500161a8874e`
@@ -97,7 +98,10 @@ Common overrides:
 - `REGEN_ENV=0|1`
 - `SPACK_JOBS=16`
 - `MAKE_JOBS=8`
-- `COMPILER_SPEC=gcc@12.3.0`
+- `COMPILER_SPEC=nvhpc`
+- `BOOTSTRAP_COMPILER_SPEC=gcc@12.3.0`
+- `NVHPC_SPEC=nvhpc`
+- `INSTALL_NVHPC=0|1` (default: `1`)
 - `SIMIT_SPACK_DIR=/path/to/simit-spack`
 - `SIMIT_SPACK_REF=ece4c48121791f2f1fef5d5999ccf75e74df520e`
 - `CLONE_SIMIT_SPACK=0|1` (default: `1`)

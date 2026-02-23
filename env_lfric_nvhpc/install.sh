@@ -190,6 +190,49 @@ EOF
   fi
 }
 
+ensure_nvhpc_compiler() {
+  local bootstrap="${BOOTSTRAP_COMPILER_SPEC:-}"
+  local nvhpc_spec="${NVHPC_SPEC:-nvhpc}"
+  nvhpc_spec="${nvhpc_spec#%}"
+  local install_nvhpc="${INSTALL_NVHPC:-1}"
+
+  if [ -z "$bootstrap" ]; then
+    fail "BOOTSTRAP_COMPILER_SPEC is not set; cannot install NVHPC."
+    return 1
+  fi
+
+  if ! spack compilers | grep -q "$bootstrap"; then
+    warn "Bootstrap compiler $bootstrap not found by Spack. Load a matching module or set BOOTSTRAP_COMPILER_SPEC."
+  fi
+
+  if [ "$install_nvhpc" = "1" ]; then
+    if ! spack find --format "{name}@{version}" "$nvhpc_spec" >/dev/null 2>&1; then
+      info "Installing NVHPC ($nvhpc_spec) with bootstrap %$bootstrap"
+      if ! spack install -j "$SPACK_JOBS" "$nvhpc_spec" "%$bootstrap"; then
+        fail "Failed to install NVHPC ($nvhpc_spec) with bootstrap %$bootstrap."
+        return 1
+      fi
+    fi
+  fi
+
+  nvhpc_prefix="$(spack location -i "$nvhpc_spec" 2>/dev/null || true)"
+  if [ -n "$nvhpc_prefix" ]; then
+    spack compiler find "$nvhpc_prefix" >/dev/null 2>&1 || true
+  fi
+
+  if [ "$COMPILER_SPEC" = "nvhpc" ]; then
+    nvhpc_compiler="$(spack compilers | awk '/nvhpc@/{print $1; exit}')"
+    if [ -n "$nvhpc_compiler" ]; then
+      COMPILER_SPEC="$nvhpc_compiler"
+    fi
+  fi
+
+  if ! spack compilers | grep -q "$COMPILER_SPEC"; then
+    warn "NVHPC compiler $COMPILER_SPEC not registered with Spack."
+  fi
+  return 0
+}
+
 repo_url() {
   printf '%s%s.git' "$GITHUB_BASE" "$1"
 }
@@ -2268,8 +2311,18 @@ main() {
     return 1
   fi
 
-  COMPILER_SPEC="${COMPILER_SPEC:-gcc@12.3.0}"
+  COMPILER_SPEC="${COMPILER_SPEC:-nvhpc}"
   COMPILER_SPEC="${COMPILER_SPEC#%}"
+  BOOTSTRAP_COMPILER_SPEC="${BOOTSTRAP_COMPILER_SPEC:-gcc@12.3.0}"
+  BOOTSTRAP_COMPILER_SPEC="${BOOTSTRAP_COMPILER_SPEC#%}"
+  INSTALL_NVHPC="${INSTALL_NVHPC:-1}"
+  if [ -z "${NVHPC_SPEC:-}" ]; then
+    if [ "${COMPILER_SPEC%%@*}" = "nvhpc" ]; then
+      NVHPC_SPEC="$COMPILER_SPEC"
+    else
+      NVHPC_SPEC="nvhpc"
+    fi
+  fi
 
   SIMIT_SPACK_DIR="${SIMIT_SPACK_DIR:-$WORKING_DIR/simit-spack-main}"
   if [ -z "${SIMIT_SPACK_URL:-}" ]; then
@@ -2633,6 +2686,11 @@ SSH_ASKPASS_EOF
   fi
 
   spack compiler find || true
+  if [ "${COMPILER_SPEC%%@*}" = "nvhpc" ]; then
+    if ! ensure_nvhpc_compiler; then
+      return 1
+    fi
+  fi
   if ! spack compilers | grep -q "$COMPILER_SPEC"; then
     echo "WARN: compiler $COMPILER_SPEC not found by Spack; load a matching compiler module or set COMPILER_SPEC." >&2
   fi
