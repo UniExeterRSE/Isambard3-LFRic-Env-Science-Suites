@@ -8,7 +8,18 @@
 #SBATCH --output=install-lfric-apps-isambard-env.%j.out
 #SBATCH --error=install-lfric-apps-isambard-env.%j.out
 
-ROOT_DIR="${ROOT_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+if [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
+  if [ -f "$SLURM_SUBMIT_DIR/install.sh" ]; then
+    ROOT_DIR="$SLURM_SUBMIT_DIR"
+  elif [ -f "$SLURM_SUBMIT_DIR/env_lfric/install.sh" ]; then
+    ROOT_DIR="$SLURM_SUBMIT_DIR/env_lfric"
+  else
+    ROOT_DIR="$SLURM_SUBMIT_DIR"
+  fi
+else
+  ROOT_DIR="$PWD"
+fi
+cd "$ROOT_DIR" || exit 1
 
 # Tie Spack parallelism to the Slurm allocation.
 export SPACK_JOBS=32

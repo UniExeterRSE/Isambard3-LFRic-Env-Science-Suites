@@ -26,6 +26,72 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+patch_stop_timing_signature() {
+  local timing_file="$WORKING_DIR/lfric_core/infrastructure/source/utilities/timing_mod.F90"
+  if [ ! -f "$timing_file" ]; then
+    warn "timing_mod.F90 not found at $timing_file; skipping stop_timing patch."
+    return 0
+  fi
+  if grep -q "optional :: timing_section_name" "$timing_file"; then
+    return 0
+  fi
+  if ! perl -0777 -i -pe 's/subroutine stop_timing\(\s*timing_section_handle\s*\)\s*\n\s*implicit none\s*\n\s*integer\(tik\),\s*intent\(in\)\s*::\s*timing_section_handle/subroutine stop_timing( timing_section_handle, timing_section_name )\n\n        implicit none\n\n        integer(tik),  intent(in) :: timing_section_handle\n        character(*),  intent(in), optional :: timing_section_name/s' "$timing_file"; then
+    warn "Failed to patch stop_timing signature in $timing_file."
+    return 0
+  fi
+  info "Patched stop_timing signature for compatibility."
+  return 0
+}
+
+patch_mpicxx_wrapper_detection() {
+  local mpicxx_mk="$WORKING_DIR/lfric_core/infrastructure/build/cxx/mpic++.mk"
+  if [ ! -f "$mpicxx_mk" ]; then
+    warn "mpic++.mk not found at $mpicxx_mk; skipping wrapper patch."
+    return 0
+  fi
+  if grep -q "Normalise wrapper output" "$mpicxx_mk"; then
+    return 0
+  fi
+  cat > "$mpicxx_mk" <<'EOF'
+##############################################################################
+# (c) Crown copyright 2024 Met Office. All rights reserved.
+# The file LICENCE, distributed with this code, contains details of the terms
+# under which the code may be used.
+##############################################################################
+
+MPIC_COMPILER := $(shell $(CXX) --version                    | awk -F " " 'NR<2 { printf "%s", $$1 }')
+
+# Normalise wrapper output to known compiler ids.
+ifneq (,$(findstring g++, $(MPIC_COMPILER)))
+  MPIC_COMPILER := g++
+endif
+ifneq (,$(findstring nvc++, $(MPIC_COMPILER)))
+  MPIC_COMPILER := nvc++
+endif
+ifeq ($(MPIC_COMPILER),PIC_COMPILER)
+  MPIC_COMPILER := g++
+endif
+
+$(info ** Chosen MPI C++ compiler "$(MPIC_COMPILER)")
+
+ifeq '$(MPIC_COMPILER)' 'g++'
+  CXX_COMPILER = g++
+else ifeq '$(MPIC_COMPILER)' 'icc'
+  CXX_COMPILER = icc
+else ifeq '$(MPIC_COMPILER)' 'Cray'
+  CXX_COMPILER = craycc
+else ifeq '$(MPIC_COMPILER)' 'nvc++'
+  CXX_COMPILER = nvc++
+else
+  $(error Unrecognised mpic++ compiler option: "$(MPIC_COMPILER)")
+endif
+
+include $(LFRIC_BUILD)/cxx/$(CXX_COMPILER).mk
+EOF
+  info "Patched mpic++.mk wrapper detection."
+  return 0
+}
+
 map_cylc_dep_to_spack() {
   local dep="${1%%==*}"
   case "$dep" in
@@ -271,10 +337,16 @@ clone_or_update() {
       git -C "$path" fetch --tags --prune
       if [ "$ref_is_commit" -eq 1 ] \
         && git -C "$path" rev-parse --is-shallow-repository 2>/dev/null | grep -q true; then
-        git -C "$path" fetch --unshallow || git -C "$path" fetch --depth=1000000
+        if ! git -C "$path" fetch --unshallow && ! git -C "$path" fetch --depth=1000000; then
+          fail "Failed to unshallow $name to reach ref $ref."
+          return 1
+        fi
       fi
       if [ -n "$ref" ]; then
-        git -C "$path" checkout "$ref" || true
+        if ! git -C "$path" checkout "$ref"; then
+          fail "Failed to checkout $name ref $ref."
+          return 1
+        fi
       fi
       git -C "$path" pull --ff-only || true
     fi
@@ -2485,6 +2557,8 @@ SSH_ASKPASS_EOF
   fi
 
   clone_lfric_core "$LFRIC_CORE_REF" || { fail "Failed to clone lfric_core."; return 1; }
+  patch_stop_timing_signature
+  patch_mpicxx_wrapper_detection
 
   if [ -d "$SPACK_DIR" ] && [ ! -d "$SPACK_DIR/.git" ]; then
     warn "Spack directory $SPACK_DIR exists but is not a git repo; removing for a clean clone."
@@ -2899,9 +2973,17 @@ EOF
   mpich_prefix="$(spack -e "$ENV_NAME" location -i mpich 2>/dev/null || true)"
   if [ -n "$mpich_prefix" ] && [ -x "$mpich_prefix/bin/mpif90" ]; then
     mpi_fc="$mpich_prefix/bin/mpif90"
+    mpi_cxx="$mpich_prefix/bin/mpic++"
+    if [ ! -x "$mpi_cxx" ]; then
+      mpi_cxx="$mpich_prefix/bin/mpicxx"
+    fi
     export PATH="$mpich_prefix/bin:$PATH"
   else
     mpi_fc="mpif90"
+    mpi_cxx="mpic++"
+    if ! command -v "$mpi_cxx" >/dev/null 2>&1; then
+      mpi_cxx="mpicxx"
+    fi
   fi
   if [ "${KEEP_FC:-0}" != "1" ]; then
     export FC="$mpi_fc"
@@ -2910,6 +2992,9 @@ EOF
     export MPIF90="$mpi_fc"
     export F90="$mpi_fc"
     export F77="$mpi_fc"
+  fi
+  if [ -z "${CXX:-}" ] && [ -n "$mpi_cxx" ]; then
+    export CXX="$mpi_cxx"
   fi
 
   mpif90_path="$(command -v mpif90 || true)"
@@ -2983,8 +3068,16 @@ EOF
     -w "$LOCAL_BUILD_WORKING_DIR"
     -j "${MAKE_JOBS:-8}"
     -t build
-    -u "$LFRIC_TARGET_PLATFORM"
   )
+
+  local_build_help="$("$PYTHON_BIN" "$APPS_ROOT_DIR/build/local_build.py" -h 2>&1 || true)"
+  added_target_flag=0
+  if printf '%s\n' "$local_build_help" | grep -qE '(^|[[:space:]])-u([[:space:],]|$)|--target'; then
+    BUILD_CMD+=(-u "$LFRIC_TARGET_PLATFORM")
+    added_target_flag=1
+  else
+    warn "local_build.py does not support -u; skipping LFRIC_TARGET_PLATFORM."
+  fi
 
   if [ "${VERBOSE_BUILD:-0}" = "1" ]; then
     BUILD_CMD+=(-v)
@@ -2996,6 +3089,27 @@ EOF
   fi
   "${BUILD_CMD[@]}" |& tee "$LOCAL_BUILD_LOG"
   build_status=${PIPESTATUS[0]}
+  if [ "$build_status" -ne 0 ]; then
+    if [ "$added_target_flag" -eq 1 ] \
+      && [ "$build_status" -eq 2 ] \
+      && grep -q "unrecognized arguments: -u" "$LOCAL_BUILD_LOG"; then
+      warn "local_build.py rejected -u; retrying without LFRIC_TARGET_PLATFORM."
+      BUILD_CMD=(
+        "$PYTHON_BIN"
+        "$APPS_ROOT_DIR/build/local_build.py"
+        lfric_atm
+        -c "$CORE_ROOT_DIR"
+        -w "$LOCAL_BUILD_WORKING_DIR"
+        -j "${MAKE_JOBS:-8}"
+        -t build
+      )
+      if [ "${VERBOSE_BUILD:-0}" = "1" ]; then
+        BUILD_CMD+=(-v)
+      fi
+      "${BUILD_CMD[@]}" |& tee "$LOCAL_BUILD_LOG"
+      build_status=${PIPESTATUS[0]}
+    fi
+  fi
   if [ "$build_status" -ne 0 ]; then
     fail "local_build.py failed for lfric_atm (exit $build_status). See $LOCAL_BUILD_LOG."
     return 1
