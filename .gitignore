@@ -13,3 +13,5 @@ env_lfric/working_dir/
 *.swp
 *.swo
 .DS_Store
+
+*.pyc
