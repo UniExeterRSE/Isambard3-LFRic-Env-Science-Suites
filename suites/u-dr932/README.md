@@ -9,6 +9,12 @@ revisions of the LFRic trunks that were available on MOSRS are also available
 from git and so this setup of suite can be used for older LFRic versions. Any
 MOSRS branches will need porting to git before being used.
 
+See also:
+- `../README.md`
+- `../../README.md`
+- `../../env_lfric_gcc/README.md`
+- `../../env_lfric_nvhpc/README.md`
+
 Setting Source Codes
 --------------------
 
@@ -58,4 +64,3 @@ also be done if correct authentication has been setup by setting
 Using the mirrors requires either setting the `MIRROR_LOC` variable or setting
 up the `localmirrors:` alias by running,
 `git config --global url."hostname:/path/to/git_mirrors/".insteadOf "localmirrors:"`
-

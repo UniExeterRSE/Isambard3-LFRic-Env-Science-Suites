@@ -26,6 +26,15 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+is_subpath() {
+  local path="$1"
+  local base="$2"
+  case "$path" in
+    "$base"|"$base"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 patch_stop_timing_signature() {
   local timing_file="$WORKING_DIR/lfric_core/infrastructure/source/utilities/timing_mod.F90"
   if [ ! -f "$timing_file" ]; then
@@ -127,6 +136,54 @@ map_cylc_dep_to_spack() {
     traitlets) echo "py-traitlets" ;;
     *) return 1 ;;
   esac
+}
+
+ensure_nvhpc_compiler() {
+  local bootstrap="${BOOTSTRAP_COMPILER_SPEC:-}"
+  local nvhpc_spec="${NVHPC_SPEC:-nvhpc}"
+  nvhpc_spec="${nvhpc_spec#%}"
+  local install_nvhpc="${INSTALL_NVHPC:-1}"
+
+  if [ -z "$bootstrap" ]; then
+    fail "BOOTSTRAP_COMPILER_SPEC is not set; cannot install NVHPC."
+    return 1
+  fi
+
+  if ! spack compilers | grep -q "$bootstrap"; then
+    warn "Bootstrap compiler $bootstrap not found by Spack. Load a matching module or set BOOTSTRAP_COMPILER_SPEC."
+  fi
+
+  if [ "$install_nvhpc" = "1" ]; then
+    if ! spack find --format "{name}@{version}" "$nvhpc_spec" >/dev/null 2>&1; then
+      info "Installing NVHPC ($nvhpc_spec) with bootstrap %$bootstrap"
+      if ! spack install -j "$SPACK_JOBS" "$nvhpc_spec" "%$bootstrap"; then
+        fail "Failed to install NVHPC ($nvhpc_spec) with bootstrap %$bootstrap."
+        return 1
+      fi
+    fi
+  fi
+
+  nvhpc_prefix="$(spack location -i "$nvhpc_spec" 2>/dev/null || true)"
+  if [ -n "$nvhpc_prefix" ]; then
+    spack compiler find "$nvhpc_prefix" >/dev/null 2>&1 || true
+  fi
+
+  if [ "$COMPILER_SPEC" = "nvhpc" ]; then
+    nvhpc_compiler="$(spack compilers 2>/dev/null | sed -n 's/.*\(nvhpc@[^[:space:]]\+\).*/\1/p' | head -n 1)"
+    if [ -n "$nvhpc_compiler" ]; then
+      COMPILER_SPEC="$nvhpc_compiler"
+    fi
+  fi
+
+  if ! printf '%s' "$COMPILER_SPEC" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9@._+-]*$'; then
+    warn "Invalid COMPILER_SPEC '$COMPILER_SPEC' detected after NVHPC probe; falling back to nvhpc."
+    COMPILER_SPEC="nvhpc"
+  fi
+
+  if ! spack compilers | grep -q "$COMPILER_SPEC"; then
+    warn "NVHPC compiler $COMPILER_SPEC not registered with Spack."
+  fi
+  return 0
 }
 
 install_missing_cylc_deps() {
@@ -254,49 +311,6 @@ INFO: Suggested manual checks:
   spack -e lfric-apps-isambard find metomi-rose cylc-flow cylc-rose cylc-uiserver
 EOF
   fi
-}
-
-ensure_nvhpc_compiler() {
-  local bootstrap="${BOOTSTRAP_COMPILER_SPEC:-}"
-  local nvhpc_spec="${NVHPC_SPEC:-nvhpc}"
-  nvhpc_spec="${nvhpc_spec#%}"
-  local install_nvhpc="${INSTALL_NVHPC:-1}"
-
-  if [ -z "$bootstrap" ]; then
-    fail "BOOTSTRAP_COMPILER_SPEC is not set; cannot install NVHPC."
-    return 1
-  fi
-
-  if ! spack compilers | grep -q "$bootstrap"; then
-    warn "Bootstrap compiler $bootstrap not found by Spack. Load a matching module or set BOOTSTRAP_COMPILER_SPEC."
-  fi
-
-  if [ "$install_nvhpc" = "1" ]; then
-    if ! spack find --format "{name}@{version}" "$nvhpc_spec" >/dev/null 2>&1; then
-      info "Installing NVHPC ($nvhpc_spec) with bootstrap %$bootstrap"
-      if ! spack install -j "$SPACK_JOBS" "$nvhpc_spec" "%$bootstrap"; then
-        fail "Failed to install NVHPC ($nvhpc_spec) with bootstrap %$bootstrap."
-        return 1
-      fi
-    fi
-  fi
-
-  nvhpc_prefix="$(spack location -i "$nvhpc_spec" 2>/dev/null || true)"
-  if [ -n "$nvhpc_prefix" ]; then
-    spack compiler find "$nvhpc_prefix" >/dev/null 2>&1 || true
-  fi
-
-  if [ "$COMPILER_SPEC" = "nvhpc" ]; then
-    nvhpc_compiler="$(spack compilers | awk '/nvhpc@/{print $1; exit}')"
-    if [ -n "$nvhpc_compiler" ]; then
-      COMPILER_SPEC="$nvhpc_compiler"
-    fi
-  fi
-
-  if ! spack compilers | grep -q "$COMPILER_SPEC"; then
-    warn "NVHPC compiler $COMPILER_SPEC not registered with Spack."
-  fi
-  return 0
 }
 
 repo_url() {
@@ -2352,6 +2366,17 @@ main() {
   UPDATE_REPOS="${UPDATE_REPOS:-0}"
   CLONE_UOE_REPO="${CLONE_UOE_REPO:-1}"
   EXIT_ON_ERROR="${EXIT_ON_ERROR:-0}"
+  ALLOW_CROSS_ENV="${ALLOW_CROSS_ENV:-0}"
+  ALLOW_EXTERNAL_SPACK="${ALLOW_EXTERNAL_SPACK:-0}"
+  ALLOW_EXTERNAL_REPOS="${ALLOW_EXTERNAL_REPOS:-0}"
+
+  sibling_gcc_dir="$(cd "$ROOT_DIR/.." && pwd)/env_lfric_gcc"
+  if [ "$ALLOW_CROSS_ENV" != "1" ] && [ -d "$sibling_gcc_dir" ]; then
+    if is_subpath "$WORKING_DIR" "$sibling_gcc_dir"; then
+      warn "WORKING_DIR points at the GCC environment ($WORKING_DIR). Resetting to $ROOT_DIR/working_dir."
+      WORKING_DIR="$ROOT_DIR/working_dir"
+    fi
+  fi
 
   if [ ! -d "$WORKING_DIR" ]; then
     if ! mkdir -p "$WORKING_DIR"; then
@@ -2369,6 +2394,10 @@ main() {
   UOE_DEPTH="${UOE_DEPTH:-1}"
 
   SPACK_DIR="${SPACK_DIR:-$WORKING_DIR/spack}"
+  if [ "$ALLOW_EXTERNAL_SPACK" != "1" ] && ! is_subpath "$SPACK_DIR" "$WORKING_DIR"; then
+    warn "SPACK_DIR ($SPACK_DIR) is outside WORKING_DIR; resetting to $WORKING_DIR/spack."
+    SPACK_DIR="$WORKING_DIR/spack"
+  fi
   SPACK_REF="${SPACK_REF:-73eaea13f381e3495299284856fd02a64e1d154c}"
   SPACK_JOBS="${SPACK_JOBS:-2}"
   info "Using SPACK_JOBS=$SPACK_JOBS"
@@ -2396,8 +2425,18 @@ main() {
 
   COMPILER_SPEC="${COMPILER_SPEC:-nvhpc}"
   COMPILER_SPEC="${COMPILER_SPEC#%}"
+  if ! printf '%s' "$COMPILER_SPEC" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9@._+-]*$'; then
+    warn "Invalid COMPILER_SPEC '$COMPILER_SPEC'; resetting to nvhpc."
+    COMPILER_SPEC="nvhpc"
+  fi
   BOOTSTRAP_COMPILER_SPEC="${BOOTSTRAP_COMPILER_SPEC:-gcc@12.3.0}"
   BOOTSTRAP_COMPILER_SPEC="${BOOTSTRAP_COMPILER_SPEC#%}"
+  PYTHON_COMPILER_SPEC="${PYTHON_COMPILER_SPEC:-$BOOTSTRAP_COMPILER_SPEC}"
+  PYTHON_COMPILER_SPEC="${PYTHON_COMPILER_SPEC#%}"
+  if ! printf '%s' "$PYTHON_COMPILER_SPEC" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9@._+-]*$'; then
+    warn "Invalid PYTHON_COMPILER_SPEC '$PYTHON_COMPILER_SPEC'; resetting to $BOOTSTRAP_COMPILER_SPEC."
+    PYTHON_COMPILER_SPEC="$BOOTSTRAP_COMPILER_SPEC"
+  fi
   INSTALL_NVHPC="${INSTALL_NVHPC:-1}"
   if [ -z "${NVHPC_SPEC:-}" ]; then
     if [ "${COMPILER_SPEC%%@*}" = "nvhpc" ]; then
@@ -2408,6 +2447,10 @@ main() {
   fi
 
   SIMIT_SPACK_DIR="${SIMIT_SPACK_DIR:-$WORKING_DIR/simit-spack-main}"
+  if [ "$ALLOW_EXTERNAL_REPOS" != "1" ] && ! is_subpath "$SIMIT_SPACK_DIR" "$WORKING_DIR"; then
+    warn "SIMIT_SPACK_DIR ($SIMIT_SPACK_DIR) is outside WORKING_DIR; resetting to $WORKING_DIR/simit-spack-main."
+    SIMIT_SPACK_DIR="$WORKING_DIR/simit-spack-main"
+  fi
   if [ -z "${SIMIT_SPACK_URL:-}" ]; then
     if [ "$USE_GITHUB_SSH" = "1" ]; then
       SIMIT_SPACK_URL="git@github.com:MetOffice/simit-spack.git"
@@ -2419,6 +2462,10 @@ main() {
   CLONE_SIMIT_SPACK="${CLONE_SIMIT_SPACK:-1}"
 
   UOE_SPACK_DIR="${UOE_SPACK_DIR:-$WORKING_DIR/uoe-umlfric-spack}"
+  if [ "$ALLOW_EXTERNAL_REPOS" != "1" ] && ! is_subpath "$UOE_SPACK_DIR" "$WORKING_DIR"; then
+    warn "UOE_SPACK_DIR ($UOE_SPACK_DIR) is outside WORKING_DIR; resetting to $WORKING_DIR/uoe-umlfric-spack."
+    UOE_SPACK_DIR="$WORKING_DIR/uoe-umlfric-spack"
+  fi
   UOE_SPACK_URL="${UOE_SPACK_URL:-https://github.com/Uni-of-Exeter/uoe-umlfric-spack.git}"
   UOE_SPACK_REF="${UOE_SPACK_REF:-16b095587a8f04282ed8de8fe419a1fad1ff36e9}"
   USE_UOE_REPO="${USE_UOE_REPO:-0}"
@@ -2790,6 +2837,56 @@ SSH_ASKPASS_EOF
   if [ "$REGEN_ENV" = "1" ] && [ -f "$ENV_DIR/spack.lock" ]; then
     rm -f "$ENV_DIR/spack.lock"
   fi
+  if [ -f "$ENV_FILE" ]; then
+    updated_compiler_req=0
+    if grep -qE '^[[:space:]]*require: \[[\"'\'']%[^\"'\'']*[\"'\'']\]' "$ENV_FILE"; then
+      current_req="$(sed -n "s/^[[:space:]]*require: \\[[\"']%\\([^\"']*\\)[\"']\\].*/\\1/p" "$ENV_FILE" | head -n 1)"
+      if [ -n "$current_req" ] && [ "$current_req" != "$COMPILER_SPEC" ]; then
+        info "Updating compiler preference in $ENV_FILE to $COMPILER_SPEC (was %$current_req)."
+      elif [ -n "$current_req" ]; then
+        info "Normalizing compiler preference in $ENV_FILE to $COMPILER_SPEC."
+      fi
+      sed -i -E "0,/^([[:space:]]*)require: \\[[\"']%[^\"']*[\"']\\]/{s//\\1compiler: [\"${COMPILER_SPEC}\"]/}" "$ENV_FILE"
+      updated_compiler_req=1
+    elif grep -qE '^[[:space:]]*compiler: \[[\"'\''][^\"'\'']*[\"'\'']\]' "$ENV_FILE"; then
+      current_req="$(sed -n "s/^[[:space:]]*compiler: \\[[\"']\\([^\"']*\\)[\"']\\].*/\\1/p" "$ENV_FILE" | head -n 1)"
+      if [ -n "$current_req" ] && [ "$current_req" != "$COMPILER_SPEC" ]; then
+        info "Updating compiler preference in $ENV_FILE to $COMPILER_SPEC (was $current_req)."
+        sed -i -E "0,/^([[:space:]]*)compiler: \\[[\"'][^\"']*[\"']\\]/{s//\\1compiler: [\"${COMPILER_SPEC}\"]/}" "$ENV_FILE"
+        updated_compiler_req=1
+      fi
+    fi
+
+    if grep -qE '^[[:space:]]{4}python:[[:space:]]*$' "$ENV_FILE"; then
+      python_has_compiler="$(awk '
+        /^[[:space:]]{4}python:[[:space:]]*$/ {in=1; next}
+        in && /^[[:space:]]{4}[A-Za-z0-9_.-]+:[[:space:]]*$/ {in=0}
+        in && /^[[:space:]]{6}compiler:[[:space:]]*\\[/ {print "1"; exit}
+        END { print "0" }
+      ' "$ENV_FILE")"
+      if [ "$python_has_compiler" != "1" ]; then
+        sed -i -E "/^[[:space:]]{4}python:[[:space:]]*$/a\\      compiler: [\"${PYTHON_COMPILER_SPEC}\"]" "$ENV_FILE"
+        updated_compiler_req=1
+      fi
+    fi
+
+    if ! grep -qE '^[[:space:]]{4}py-\\*:[[:space:]]*$' "$ENV_FILE"; then
+      perl -0777 -i -pe "s/^([[:space:]]{4}py-setuptools:)/    py-*:\
+\\n      compiler: [\\\"${PYTHON_COMPILER_SPEC}\\\"]\\n\\1/m" "$ENV_FILE"
+      updated_compiler_req=1
+    fi
+
+    if grep -qE '^[[:space:]]*- \"?lfric-apps-isambard' "$ENV_FILE"; then
+      if ! grep -qE "lfric-apps-isambard[^\"]*%${COMPILER_SPEC}" "$ENV_FILE"; then
+        sed -i -E "0,/^[[:space:]]*- \"?lfric-apps-isambard[^\"]*\"?/{s//  - \"lfric-apps-isambard %${COMPILER_SPEC}\"/}" "$ENV_FILE"
+        updated_compiler_req=1
+      fi
+    fi
+    if [ "$updated_compiler_req" -eq 1 ] && [ -f "$ENV_DIR/spack.lock" ]; then
+      rm -f "$ENV_DIR/spack.lock"
+    fi
+  fi
+
   if [ ! -f "$ENV_FILE" ]; then
     cat > "$ENV_FILE" <<EOF
 spack:
@@ -2815,18 +2912,30 @@ EOF
     cat >> "$ENV_FILE" <<EOF
   packages:
     all:
-      require: ["%${COMPILER_SPEC}"]
+      compiler: ["${COMPILER_SPEC}"]
       providers:
         mpi: [mpich]
     python:
+      compiler: ["${PYTHON_COMPILER_SPEC}"]
       variants: +shared
+    py-*:
+      compiler: ["${PYTHON_COMPILER_SPEC}"]
     py-setuptools:
       version: [":79"]
   specs:
-  - "lfric-apps-isambard"
+  - "lfric-apps-isambard %${COMPILER_SPEC}"
 EOF
   else
     echo "Using existing environment manifest at $ENV_FILE"
+  fi
+
+  SPACK_ENV_DIR="$SPACK_DIR/var/spack/environments/$ENV_NAME"
+  if [ -d "$SPACK_ENV_DIR" ] && [ -f "$ENV_FILE" ]; then
+    info "Syncing $ENV_FILE to $SPACK_ENV_DIR/spack.yaml"
+    cp "$ENV_FILE" "$SPACK_ENV_DIR/spack.yaml"
+    if [ -f "$SPACK_ENV_DIR/spack.lock" ]; then
+      rm -f "$SPACK_ENV_DIR/spack.lock"
+    fi
   fi
 
   if ! spack env list | grep -Eq "^[[:space:]]*$ENV_NAME$"; then

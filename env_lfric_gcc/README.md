@@ -6,11 +6,16 @@ plus scripts that install, activate, and validate the environment.
 
 Start here for day-to-day usage (login or compute nodes):
 ```
-source env_lfric_iteration_2/activate.sh
+source env_lfric_gcc/activate.sh
 ```
 `activate.sh` loads the local Spack install, activates the environment, and
 puts the environment view on `PATH`. This is the preferred entrypoint for
-interactive use.
+interactive use. From inside this directory, you can also run `source activate.sh`.
+
+See also:
+- `../README.md`
+- `../env_lfric_nvhpc/README.md`
+- `../suites/README.md`
 
 ## The Spack Environment
 
@@ -49,9 +54,8 @@ Use the Slurm wrapper to run the build on a compute node:
 sbatch compute_node_install.slurm
 ```
 
-The wrapper sets `SPACK_JOBS` and runs
-`lfric_spack_package_rose_cylc_gui/driver_rose_clyc_gui.sh` from the repo root.
-Override `WORKING_DIR` and `ENV_NAME` via `sbatch --export` if needed.
+The wrapper sets `SPACK_JOBS` and runs `./install.sh`. Override `WORKING_DIR`
+and `ENV_NAME` via `sbatch --export` if needed.
 
 ## Rose/Cylc Environment Check
 
@@ -125,7 +129,7 @@ Common overrides:
 ## Notes
 
 - By default, `activate.sh` sets the Cylc run base to the directory one level
-  above `env_lfric/` (it writes a managed block into `~/.cylc/flow/global.cylc`).
+  above `env_lfric_gcc/` (it writes a managed block into `~/.cylc/flow/global.cylc`).
   Override with `CYLC_RUN_BASE=/path/to/base` before sourcing `activate.sh`.
 - The driver writes the active environment manifest under `working_dir/spack-envs/`
   by default (or wherever `ENV_DIR` points); the active environment itself is

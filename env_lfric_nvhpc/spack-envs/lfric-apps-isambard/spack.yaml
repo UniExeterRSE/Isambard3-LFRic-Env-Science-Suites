@@ -8,12 +8,15 @@ spack:
   - "/home/u35v/lberrisford.u35v/.spack/package_repos/fncqgg4/repos/spack_repo/builtin"
   packages:
     all:
-      require: ["%nvhpc"]
+      compiler: ["nvhpc"]
       providers:
         mpi: [mpich]
     python:
+      compiler: ["gcc@12.3.0"]
       variants: +shared
+    py-*:
+      compiler: ["gcc@12.3.0"]
     py-setuptools:
       version: [":79"]
   specs:
-  - "lfric-apps-isambard"
+  - "lfric-apps-isambard %nvhpc"

@@ -6,10 +6,18 @@ include their own `README.md` with case-specific notes.
 
 ## How To Use
 
-1. Build and activate the environment via `env_lfric/README.md`.
+1. Build and activate the environment via
+   `env_lfric_gcc/README.md` or `env_lfric_nvhpc/README.md`.
 2. Enter the suite directory you want to run.
 3. Follow the suite README (if present) or the standard Rose/Cylc workflow
    defined by `flow.cylc` and `rose-suite.conf`.
+
+See also:
+- `../README.md`
+- `../env_lfric_gcc/README.md`
+- `../env_lfric_nvhpc/README.md`
+- `u-dn704/README.md`
+- `u-dr932/README.md`
 
 ## What To Commit
 
