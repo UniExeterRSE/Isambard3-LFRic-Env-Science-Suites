@@ -45,12 +45,3 @@ Make sure you have an SSH agent running with your private key loaded.
    ```bash
    ssh-add -l
    ```
-4. Verify SSH works to the target host:
-   ```bash
-   ssh -v <target-host>
-   ```
-
-If you hop through login nodes, you may need agent forwarding:
-```bash
-ssh -A <login-host>
-```
