@@ -27,3 +27,30 @@ See also:
   environments and suites aligned for handover.
 - Runtime artifacts (for example `working_dir/` and log files) are generated
   during installs/runs and are ignored by default.
+
+## Cylc VIP And SSH
+
+`cylc vip` relies on standard SSH authentication to reach the scheduler host.
+Make sure you have an SSH agent running with your private key loaded.
+
+1. Start an agent (if you do not already have one):
+   ```bash
+   eval "$(ssh-agent -s)"
+   ```
+2. Add your key:
+   ```bash
+   ssh-add ~/.ssh/id_ed25519
+   ```
+3. Confirm it is loaded:
+   ```bash
+   ssh-add -l
+   ```
+4. Verify SSH works to the target host:
+   ```bash
+   ssh -v <target-host>
+   ```
+
+If you hop through login nodes, you may need agent forwarding:
+```bash
+ssh -A <login-host>
+```
