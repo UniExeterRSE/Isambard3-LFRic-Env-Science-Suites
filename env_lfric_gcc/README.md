@@ -129,8 +129,8 @@ Common overrides:
 ## Notes
 
 - By default, `activate.sh` sets the Cylc run base to
-  `/projects/u35v/cylc-run-directory/$USER/cylc-run` (it writes a managed block
-  into `~/.cylc/flow/global.cylc`). Override with `CYLC_RUN_BASE=/path/to/base`
+  `/projects/u35v/$USER/cylc-run` (it writes a managed block into
+  `~/.cylc/flow/global.cylc`). Override with `CYLC_RUN_BASE=/path/to/base`
   before sourcing `activate.sh`.
 - The driver writes the active environment manifest under `working_dir/spack-envs/`
   by default (or wherever `ENV_DIR` points); the active environment itself is
