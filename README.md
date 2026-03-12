@@ -94,8 +94,8 @@ then either generate a key (e.g. `ssh-keygen -t ed25519`) or point
      ```
    - Click “New SSH key”, paste the public key, and save.
 5. Authorize the key for MetOffice SSO:
-   - Go to Settings -> SSH and GPG Keys 
-   - For the key that you hvae created click the drop down for "Configure SSO"
+   - Go to Settings -> SSH and GPG Keys (https://github.com/settings/keys)
+   - For the key that you have created click the drop down for "Configure SSO"
    - Login and Authorize the key for use with the MetOffice
 6. Verify access:
    ```bash
