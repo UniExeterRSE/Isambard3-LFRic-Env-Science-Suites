@@ -94,6 +94,8 @@ CYLC_USER_CONF="${CYLC_USER_CONF:-$HOME/.cylc/flow/global.cylc}"
 CYLC_USER_CONF_DIR="$(dirname "$CYLC_USER_CONF")"
 CYLC_RUN_BLOCK_START="# BEGIN LFRIC_CYLC_RUN_DIR"
 CYLC_RUN_BLOCK_END="# END LFRIC_CYLC_RUN_DIR"
+CYLC_PLATFORM_BLOCK_START="# BEGIN LFRIC_ISAMBARD3_PLATFORM"
+CYLC_PLATFORM_BLOCK_END="# END LFRIC_ISAMBARD3_PLATFORM"
 
 mkdir -p "$CYLC_USER_CONF_DIR" "$CYLC_RUN_BASE"
 if [ ! -f "$CYLC_USER_CONF" ]; then
@@ -124,6 +126,38 @@ $CYLC_RUN_BLOCK_START
             run = $CYLC_RUN_BASE
 $CYLC_RUN_BLOCK_END
 EOF
+fi
+
+# Install a default isambard3 platform definition in platforms.d (user scope).
+CYLC_PLATFORMS_DIR="$CYLC_USER_CONF_DIR/platforms.d"
+CYLC_ISAMBARD3_PLATFORM_FILE="$CYLC_PLATFORMS_DIR/isambard3.cylc"
+mkdir -p "$CYLC_PLATFORMS_DIR"
+if [ ! -f "$CYLC_ISAMBARD3_PLATFORM_FILE" ]; then
+  cat > "$CYLC_ISAMBARD3_PLATFORM_FILE" <<EOF
+$CYLC_PLATFORM_BLOCK_START
+[platforms]
+    [[isambard3]]
+        hosts = localhost
+        job runner = slurm
+        install target = localhost
+$CYLC_PLATFORM_BLOCK_END
+EOF
+elif grep -q "$CYLC_PLATFORM_BLOCK_START" "$CYLC_ISAMBARD3_PLATFORM_FILE" 2>/dev/null; then
+  awk -v start="$CYLC_PLATFORM_BLOCK_START" -v end="$CYLC_PLATFORM_BLOCK_END" '
+    $0 == start {
+      inblock=1
+      print
+      print "[platforms]"
+      print "    [[isambard3]]"
+      print "        hosts = localhost"
+      print "        job runner = slurm"
+      print "        install target = localhost"
+      next
+    }
+    $0 == end { inblock=0; print; next }
+    !inblock { print }
+  ' "$CYLC_ISAMBARD3_PLATFORM_FILE" > "$CYLC_ISAMBARD3_PLATFORM_FILE.tmp" \
+    && mv "$CYLC_ISAMBARD3_PLATFORM_FILE.tmp" "$CYLC_ISAMBARD3_PLATFORM_FILE"
 fi
 
 hash -r
