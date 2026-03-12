@@ -100,5 +100,5 @@ then either generate a key (e.g. `ssh-keygen -t ed25519`) or point
 6. Verify access:
    ```bash
    ssh -T git@github.com
-   git ls-remote git@github.com:MetOffice/jules.git >/dev/null
+   git ls-remote git@github.com:MetOffice/jules.git
    ```
