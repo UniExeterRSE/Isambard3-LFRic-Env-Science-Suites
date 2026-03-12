@@ -45,3 +45,60 @@ Make sure you have an SSH agent running with your private key loaded.
    ```bash
    ssh-add -l
    ```
+
+## GitHub Access And MetOffice SSO
+
+During the suite `extract` step, `get_git_sources.py` clones the MetOffice
+repositories listed in `suites/<suite>/dependencies.yaml`. The MetOffice
+GitHub organization enforces SAML SSO, so GitHub will return `403` errors until
+your credentials are explicitly authorized for the org. This applies to both
+HTTPS tokens and SSH keys.
+
+The environment installs use SSH by default (`USE_GITHUB_SSH=1` in
+`env_lfric_*/install.sh`), and expect an SSH key at
+`~/.ssh/id_ed25519` unless you override it via `GITHUB_SSH_KEY`.
+
+```bash
+# SSH (default for install.sh and preferred for workflows):
+export GITHUB_SSH_KEY="$HOME/.ssh/id_ed25519"  # or your actual key path
+# One-time: add the public key to GitHub and authorize it for MetOffice SSO.
+ssh -T git@github.com
+git ls-remote git@github.com:MetOffice/jules.git >/dev/null
+```
+
+If you see:
+`SSH key not found at /home/.../.ssh/id_ed25519`
+then either generate a key (e.g. `ssh-keygen -t ed25519`) or point
+`GITHUB_SSH_KEY` at your existing key before running the install or suite.
+
+### Creating And Authorizing An SSH Key (GitHub + MetOffice SSO)
+
+1. Create a new SSH key (press enter for the default path, which the suites expect):
+   ```bash
+   ssh-keygen -t ed25519 -C "your.email@domain"
+   ```
+2. Start an agent and load the key:
+   ```bash
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_ed25519
+   ssh-add -l
+   ```
+3. Copy the public key:
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   ```
+4. Add the key in GitHub:
+   - Go to your GitHub settings page for SSH keys:
+     ```text
+     https://github.com/settings/keys
+     ```
+   - Click “New SSH key”, paste the public key, and save.
+5. Authorize the key for MetOffice SSO:
+   - Go to Settings -> SSH and GPG Keys 
+   - For the key that you hvae created click the drop down for "Configure SSO"
+   - Login and Authorize the key for use with the MetOffice
+6. Verify access:
+   ```bash
+   ssh -T git@github.com
+   git ls-remote git@github.com:MetOffice/jules.git >/dev/null
+   ```
