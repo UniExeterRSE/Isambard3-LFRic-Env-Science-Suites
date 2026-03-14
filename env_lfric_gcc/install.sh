@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # LFRic Apps end-to-end driver for Isambard-style Spack installs.
-# - Clones repos (lfric_apps, lfric_core, simit-spack, optional uoe-umlfric-spack)
+# - Clones repos (lfric_apps, lfric_core, simit-spack)
 # - Prepares Spack and an environment based on the lfric-apps-isambard package
 # - Builds lfric_atm via local_build.py, runs the example, then runs rose/cylc checks
 
@@ -2307,7 +2307,6 @@ main() {
 
   USE_GITHUB_SSH="${USE_GITHUB_SSH:-1}"
   UPDATE_REPOS="${UPDATE_REPOS:-0}"
-  CLONE_UOE_REPO="${CLONE_UOE_REPO:-1}"
   EXIT_ON_ERROR="${EXIT_ON_ERROR:-0}"
 
   if [ ! -d "$WORKING_DIR" ]; then
@@ -2323,7 +2322,6 @@ main() {
   LFRIC_APPS_REF="${LFRIC_APPS_REF:-e906813e45406163723ad697584b500161a8874e}"
   LFRIC_APPS_DEPTH="${LFRIC_APPS_DEPTH:-1}"
   LFRIC_CORE_DEPTH="${LFRIC_CORE_DEPTH:-}"
-  UOE_DEPTH="${UOE_DEPTH:-1}"
 
   SPACK_DIR="${SPACK_DIR:-$WORKING_DIR/spack}"
   SPACK_REF="${SPACK_REF:-73eaea13f381e3495299284856fd02a64e1d154c}"
@@ -2365,10 +2363,6 @@ main() {
   SIMIT_SPACK_REF="${SIMIT_SPACK_REF:-ece4c48121791f2f1fef5d5999ccf75e74df520e}"
   CLONE_SIMIT_SPACK="${CLONE_SIMIT_SPACK:-1}"
 
-  UOE_SPACK_DIR="${UOE_SPACK_DIR:-$WORKING_DIR/uoe-umlfric-spack}"
-  UOE_SPACK_URL="${UOE_SPACK_URL:-https://github.com/Uni-of-Exeter/uoe-umlfric-spack.git}"
-  UOE_SPACK_REF="${UOE_SPACK_REF:-16b095587a8f04282ed8de8fe419a1fad1ff36e9}"
-  USE_UOE_REPO="${USE_UOE_REPO:-0}"
 
   BUILTIN_REPO_DIR=""
   if [ -d "$HOME/.spack/package_repos" ]; then
@@ -2472,11 +2466,6 @@ SSH_ASKPASS_EOF
     else
       echo "WARNING: ssh-add not found; Git may prompt for the SSH key passphrase." >&2
     fi
-  fi
-
-  if [ "$CLONE_UOE_REPO" = "1" ]; then
-  clone_or_update "uoe-umlfric-spack" "$(repo_url "Uni-of-Exeter/uoe-umlfric-spack")" "$UOE_SPACK_REF" "$UOE_DEPTH" \
-      || { fail "Failed to clone uoe-umlfric-spack."; return 1; }
   fi
 
   clone_or_update "lfric_apps" "$(repo_url "MetOffice/lfric_apps")" "$LFRIC_APPS_REF" "$LFRIC_APPS_DEPTH" \
@@ -2700,23 +2689,6 @@ SSH_ASKPASS_EOF
   fix_build_system_imports "$SIMIT_REPO"
   ensure_spack_package_imports "$SIMIT_REPO"
 
-  UOE_REPO="$UOE_SPACK_DIR/spack_repo/uoe"
-  if [ "$USE_UOE_REPO" = "1" ]; then
-    if [ ! -d "$UOE_SPACK_DIR" ]; then
-      if ! git clone "$UOE_SPACK_URL" "$UOE_SPACK_DIR"; then
-        fail "Failed to clone uoe-umlfric-spack into $UOE_SPACK_DIR."
-        return 1
-      fi
-    fi
-    if [ ! -d "$UOE_REPO" ]; then
-      fail "uoe-umlfric-spack repo not found at $UOE_REPO."
-      return 1
-    fi
-    fix_spack_pkg_builtin_imports "$UOE_REPO"
-    fix_build_system_imports "$UOE_REPO"
-    ensure_spack_package_imports "$UOE_REPO"
-  fi
-
   spack compiler find || true
   if ! spack compilers | grep -q "$COMPILER_SPEC"; then
     echo "WARN: compiler $COMPILER_SPEC not found by Spack; load a matching compiler module or set COMPILER_SPEC." >&2
@@ -2742,11 +2714,6 @@ spack:
   - "${PACKAGE_REPO}"
   - "${SIMIT_REPO}"
 EOF
-    if [ "$USE_UOE_REPO" = "1" ]; then
-      cat >> "$ENV_FILE" <<EOF
-  - "${UOE_REPO}"
-EOF
-    fi
     if [ -n "$BUILTIN_REPO_DIR" ]; then
       cat >> "$ENV_FILE" <<EOF
   - "${BUILTIN_REPO_DIR}"
