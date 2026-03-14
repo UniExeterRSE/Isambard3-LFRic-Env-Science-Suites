@@ -2,6 +2,9 @@ spack:
   view: true
   concretizer:
     unify: when_possible
+  config:
+    install_tree:
+      root: /lfs1i3/projects/u35v/lberrisford_test_build/Isambard3-LFRic-Env-Science-Suites/env_lfric_gcc/wd/spack/opt/spack
   repos:
   - "./lfric-isambard-spack_repo"
   - "./working_dir/simit-spack-main/repos/metoffice"
