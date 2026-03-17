@@ -46,6 +46,27 @@ Please note that you will need to use this installer for the time being to be
 able to use the environment as there are modifications that need to be made to
 `simit-spack` to bring it into line with the current iterations of Spack.
 
+### Access To Private Repositories (simit-spack)
+
+`simit-spack` is a Met Office repository. If you see:
+
+```
+ERROR: Failed to clone simit-spack
+```
+
+then your GitHub account likely needs access. Please request access via the
+Met Office. 
+
+If you are using SSH-based GitHub access, you may need to start an agent and
+add your key in the current session before running the installer:
+
+```
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+If your key has a different name/location, adjust accordingly.
+
 ## Install (Compute Node via Slurm)
 
 Use the Slurm wrapper to run the build on a compute node:
@@ -105,9 +126,6 @@ Common overrides:
 - `SIMIT_SPACK_DIR=/path/to/simit-spack`
 - `SIMIT_SPACK_REF=ece4c48121791f2f1fef5d5999ccf75e74df520e`
 - `CLONE_SIMIT_SPACK=0|1` (default: `1`)
-- `CLONE_UOE_REPO=0|1` (default: `1`)
-- `UOE_SPACK_REF=16b095587a8f04282ed8de8fe419a1fad1ff36e9`
-- `USE_UOE_REPO=0|1` (default: `0`)
 - `RUN_ROSE_CYLC=0|1` (default: `1`)
 - `ROSE_STEM_DIR=/path/to/rose-stem` (default: `$WORKING_DIR/lfric_apps/rose-stem`)
 - `ROSE_SITE=uoe` (default: `uoe`)
