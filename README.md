@@ -16,6 +16,10 @@ See also:
 
 ## Quick Start
 
+If you are new to Spack on Isambard 3, the
+[Isambard 3 Spack setup guide](https://docs.isambard.ac.uk/user-documentation/guides/spack/setup/)
+is a useful reference before running the environment install.
+
 1. Choose your toolchain and follow its README:
    `env_lfric_gcc/README.md` or `env_lfric_nvhpc/README.md`.
 2. Pick a suite from `suites/` and follow its README (where present).
