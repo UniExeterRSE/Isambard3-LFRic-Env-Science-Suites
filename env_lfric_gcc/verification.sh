@@ -20,11 +20,33 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+run_xios_verification() {
+  local verify_script="${XIOS_VERIFY_SCRIPT:-$SCRIPT_DIR/../tests/xios_verification.sh}"
+  local verify_workdir="${XIOS_VERIFY_WORKDIR:-$SCRIPT_DIR/working_dir/xios-verification}"
+
+  if [ ! -f "$verify_script" ]; then
+    warn "XIOS verification script not found at $verify_script"
+    return 1
+  fi
+
+  XIOS_GIT_URL="${XIOS_GIT_URL:-https://gitlab.in2p3.fr/ipsl/projets/xios-projects/xios.git}" \
+  XIOS_GIT_BRANCH="${XIOS_GIT_BRANCH:-XIOS2}" \
+  XIOS_GIT_COMMIT="${XIOS_GIT_COMMIT:-26cc7d88e4f3fa1960461b377d9b8c82550a180e}" \
+  XIOS_SVN_REVISION="${XIOS_SVN_REVISION:-2252}" \
+  XIOS_WORKDIR="$verify_workdir" \
+  KEEP_XIOS_VERIFICATION_CLONE="${KEEP_XIOS_VERIFICATION_CLONE:-0}" \
+  bash "$verify_script"
+}
+
 info "Starting rose/cylc Spack environment check."
 info "ENV_NAME=$ENV_NAME"
 info "SPACK_DIR=$SPACK_DIR"
 info "Hostname: $(hostname -f 2>/dev/null || hostname)"
 info "Date: $(date)"
+
+if ! run_xios_verification; then
+  warn "XIOS source verification failed."
+fi
 
 if [ -f "$SPACK_SETUP" ]; then
   . "$SPACK_SETUP"

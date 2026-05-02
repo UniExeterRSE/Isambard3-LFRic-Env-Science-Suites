@@ -24,11 +24,15 @@ is a useful reference before running the environment install.
    `env_lfric_gcc/README.md` or `env_lfric_nvhpc/README.md`.
 2. Pick a suite from `suites/` and follow its README (where present).
 3. Ensure the environment is active before running any suite.
+4. Run `./tests/xios_verification.sh` from the repo root if you want to check
+   the migrated XIOS source before a full Spack install.
 
 ## Notes
 
 - Each `env_lfric_*` directory can be used standalone, but this repo keeps the
   environments and suites aligned for handover.
+- XIOS is now pinned to the IPSL GitLab mirror of the former revision `2252`
+  rather than the retired SVN endpoint.
 - Runtime artifacts (for example `working_dir/` and log files) are generated
   during installs/runs and are ignored by default.
 

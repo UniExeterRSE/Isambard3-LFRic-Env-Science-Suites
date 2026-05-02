@@ -39,6 +39,9 @@ under `working_dir/`, then builds and runs `lfric_atm`.
 ./install.sh > install.log 2>&1
 ```
 
+`install.sh` now runs `../tests/xios_verification.sh` up front so the migrated XIOS
+Git source is checked before Spack starts fetching/building.
+
 To use HTTPS instead of SSH, set `USE_GITHUB_SSH=0` (and `GITHUB_TOKEN` or
 `GH_TOKEN` for private repos).
 
@@ -67,7 +70,8 @@ For a quick environment-only check (no build), use:
 
 The script sources the local Spack install, activates `lfric-apps-isambard`,
 prints spec/find output for rose/cylc, loads the packages, and prints paths and
-versions. Set `EXTENDED_TOOL_VALIDATION=0` to skip the extended diagnostics.
+versions. It also runs the shared `../tests/xios_verification.sh` check. Set
+`EXTENDED_TOOL_VALIDATION=0` to skip the extended diagnostics.
 
 ## Cylc GUI
 
@@ -128,7 +132,8 @@ Common overrides:
 - `clean.sh` — removes the local `working_dir` artifacts (safety clean-up).
 - `spack-envs/` — Spack environment templates.
 - `working_dir/` — runtime artifacts (clones, Spack install, environments, builds).
-- `lfric-isambard-spack_repo/` — local Spack repo containing `lfric-apps-isambard`.
+- `lfric-isambard-spack_repo/` — local Spack repo containing `lfric-apps-isambard`
+  and the migrated `xios` package override.
 
 ## Notes
 

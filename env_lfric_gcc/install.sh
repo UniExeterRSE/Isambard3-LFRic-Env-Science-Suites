@@ -26,6 +26,29 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+run_xios_verification() {
+  local verify_script="${XIOS_VERIFY_SCRIPT:-$ROOT_DIR/../tests/xios_verification.sh}"
+  local verify_workdir="${XIOS_VERIFY_WORKDIR:-$WORKING_DIR/xios-verification}"
+
+  if [ ! -f "$verify_script" ]; then
+    fail "XIOS verification script not found at $verify_script."
+    return 1
+  fi
+
+  info "Verifying migrated XIOS source before Spack concretization."
+  if ! XIOS_GIT_URL="${XIOS_GIT_URL:-https://gitlab.in2p3.fr/ipsl/projets/xios-projects/xios.git}" \
+      XIOS_GIT_BRANCH="${XIOS_GIT_BRANCH:-XIOS2}" \
+      XIOS_GIT_COMMIT="${XIOS_GIT_COMMIT:-26cc7d88e4f3fa1960461b377d9b8c82550a180e}" \
+      XIOS_SVN_REVISION="${XIOS_SVN_REVISION:-2252}" \
+      XIOS_WORKDIR="$verify_workdir" \
+      KEEP_XIOS_VERIFICATION_CLONE="${KEEP_XIOS_VERIFICATION_CLONE:-0}" \
+      bash "$verify_script"; then
+    fail "XIOS source verification failed."
+    return 1
+  fi
+  return 0
+}
+
 patch_stop_timing_signature() {
   local timing_file="$WORKING_DIR/lfric_core/infrastructure/source/utilities/timing_mod.F90"
   if [ ! -f "$timing_file" ]; then
@@ -2314,6 +2337,10 @@ main() {
       fail "Unable to create working directory $WORKING_DIR."
       return 1
     fi
+  fi
+
+  if ! run_xios_verification; then
+    return 1
   fi
 
   GITHUB_SSH_KEY="${GITHUB_SSH_KEY:-$HOME/.ssh/id_ed25519}"
