@@ -65,6 +65,9 @@ HTTPS tokens and SSH keys.
 The environment installs use SSH by default (`USE_GITHUB_SSH=1` in
 `env_lfric_*/install.sh`), and expect an SSH key at
 `~/.ssh/id_ed25519` unless you override it via `GITHUB_SSH_KEY`.
+The installer can use a live SSH agent, or it can call SSH directly with
+`GITHUB_SSH_KEY`. For non-interactive Slurm jobs using an encrypted key, export
+`GITHUB_SSH_PASSPHRASE` or use HTTPS with a GitHub token.
 
 ```bash
 # SSH (default for install.sh and preferred for workflows):

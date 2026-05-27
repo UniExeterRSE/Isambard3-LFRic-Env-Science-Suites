@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SPACK=/lfs1i3/projects/u35v/lberrisford/Isambard3-LFRic-Env-Science-Suites/env_lfric_gcc/working_dir/spack/bin/spack
-ENV=/lfs1i3/projects/u35v/lberrisford/Isambard3-LFRic-Env-Science-Suites/env_lfric_gcc/working_dir/spack/var/spack/environments/lfric-apps-isambard
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPACK=${SPACK:-$ROOT_DIR/working_dir/spack/bin/spack}
+ENV=${ENV:-$ROOT_DIR/working_dir/spack/var/spack/environments/lfric-apps-isambard}
 ROOT_SPEC=${ROOT_SPEC:-lfric-apps-isambard}
 
 # Color helpers (disable with NO_COLOR=1)

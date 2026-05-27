@@ -60,8 +60,9 @@ ERROR: Failed to clone simit-spack
 then your GitHub account likely needs access. Please request access via the
 Met Office. 
 
-If you are using SSH-based GitHub access, you may need to start an agent and
-add your key in the current session before running the installer:
+If you are using SSH-based GitHub access, the installer can use a live SSH
+agent or call SSH directly with `GITHUB_SSH_KEY`. You can still start an agent
+and add your key in the current session before running the installer:
 
 ```
 eval "$(ssh-agent -s)"
@@ -69,6 +70,9 @@ ssh-add ~/.ssh/id_ed25519
 ```
 
 If your key has a different name/location, adjust accordingly.
+For non-interactive Slurm jobs using an encrypted key, export
+`GITHUB_SSH_PASSPHRASE` or set `USE_GITHUB_SSH=0` and provide `GITHUB_TOKEN` or
+`GH_TOKEN`.
 
 ## Install (Compute Node via Slurm)
 

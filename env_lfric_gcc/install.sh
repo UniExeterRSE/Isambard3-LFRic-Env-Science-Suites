@@ -26,6 +26,74 @@ warn() {
   echo "WARN: $*" >&2
 }
 
+configure_github_ssh() {
+  local key="${GITHUB_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+  local tmp_ssh_askpass=""
+
+  if [ ! -f "$key" ]; then
+    fail "SSH key not found at $key."
+    return 1
+  fi
+
+  if [ -z "${GIT_SSH_COMMAND:-}" ]; then
+    GIT_SSH_COMMAND="ssh -i \"$key\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+    if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ]; then
+      GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o BatchMode=yes"
+    fi
+    export GIT_SSH_COMMAND
+  fi
+
+  if ! command -v ssh-add >/dev/null 2>&1; then
+    warn "ssh-add not found; Git will use GIT_SSH_COMMAND with $key."
+    return 0
+  fi
+
+  if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+    if ssh-add -l >/dev/null 2>&1; then
+      return 0
+    fi
+    warn "SSH_AUTH_SOCK is set but unusable; starting a fresh agent if a passphrase is supplied."
+    unset SSH_AUTH_SOCK SSH_AGENT_PID
+  fi
+
+  if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ] && [ -t 0 ] && [ -t 1 ]; then
+    printf 'Enter passphrase for %s: ' "$key" >/dev/tty
+    IFS= read -r -s GITHUB_SSH_PASSPHRASE </dev/tty || true
+    printf '\n' >/dev/tty
+    export GITHUB_SSH_PASSPHRASE
+  fi
+
+  if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ]; then
+    warn "No usable ssh-agent; continuing with direct key-file SSH. Set GITHUB_SSH_PASSPHRASE for encrypted keys in batch jobs."
+    return 0
+  fi
+
+  eval "$(ssh-agent -s)" >/dev/null
+  tmp_ssh_askpass="$(mktemp)"
+  cat > "$tmp_ssh_askpass" <<'SSH_ASKPASS_EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${GITHUB_SSH_PASSPHRASE}"
+SSH_ASKPASS_EOF
+  chmod 700 "$tmp_ssh_askpass"
+  export SSH_ASKPASS="$tmp_ssh_askpass"
+  export SSH_ASKPASS_REQUIRE=force
+
+  if command -v setsid >/dev/null 2>&1; then
+    setsid ssh-add "$key" </dev/null
+  else
+    ssh-add "$key"
+  fi
+  local status=$?
+  rm -f "$tmp_ssh_askpass"
+  unset SSH_ASKPASS SSH_ASKPASS_REQUIRE
+
+  if [ "$status" -ne 0 ]; then
+    fail "Failed to add SSH key $key."
+    return 1
+  fi
+  return 0
+}
+
 run_xios_verification() {
   local verify_script="${XIOS_VERIFY_SCRIPT:-$ROOT_DIR/../tests/xios_verification.sh}"
   local verify_workdir="${XIOS_VERIFY_WORKDIR:-$WORKING_DIR/xios-verification}"
@@ -2440,59 +2508,7 @@ GIT_ASKPASS_EOF
   fi
 
   if [ "$USE_GITHUB_SSH" = "1" ]; then
-    if [ ! -f "$GITHUB_SSH_KEY" ]; then
-      fail "SSH key not found at $GITHUB_SSH_KEY."
-      return 1
-    fi
-    if command -v ssh-add >/dev/null 2>&1; then
-      if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-        eval "$(ssh-agent -s)" >/dev/null
-      fi
-      if ! ssh-add -l >/dev/null 2>&1; then
-        tmp_ssh_askpass=""
-        if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ] && [ -t 0 ] && [ -t 1 ]; then
-          printf 'Enter passphrase for %s: ' "$GITHUB_SSH_KEY" >/dev/tty
-          IFS= read -r -s GITHUB_SSH_PASSPHRASE </dev/tty || true
-          printf '\n' >/dev/tty
-          export GITHUB_SSH_PASSPHRASE
-        fi
-        if [ -n "$GITHUB_SSH_PASSPHRASE" ]; then
-          tmp_ssh_askpass="$(mktemp)"
-          cat > "$tmp_ssh_askpass" <<'SSH_ASKPASS_EOF'
-#!/usr/bin/env bash
-printf '%s\n' "${GITHUB_SSH_PASSPHRASE}"
-SSH_ASKPASS_EOF
-          chmod 700 "$tmp_ssh_askpass"
-          export SSH_ASKPASS="$tmp_ssh_askpass"
-          export SSH_ASKPASS_REQUIRE=force
-        fi
-        if [ -n "${SSH_ASKPASS:-}" ] && command -v setsid >/dev/null 2>&1; then
-          if ! setsid ssh-add "$GITHUB_SSH_KEY" </dev/null; then
-            if [ -n "$tmp_ssh_askpass" ] && [ -f "$tmp_ssh_askpass" ]; then
-              rm -f "$tmp_ssh_askpass"
-              unset SSH_ASKPASS SSH_ASKPASS_REQUIRE
-            fi
-            fail "Failed to add SSH key $GITHUB_SSH_KEY."
-            return 1
-          fi
-        else
-          if ! ssh-add "$GITHUB_SSH_KEY"; then
-            if [ -n "$tmp_ssh_askpass" ] && [ -f "$tmp_ssh_askpass" ]; then
-              rm -f "$tmp_ssh_askpass"
-              unset SSH_ASKPASS SSH_ASKPASS_REQUIRE
-            fi
-            fail "Failed to add SSH key $GITHUB_SSH_KEY."
-            return 1
-          fi
-        fi
-        if [ -n "$tmp_ssh_askpass" ] && [ -f "$tmp_ssh_askpass" ]; then
-          rm -f "$tmp_ssh_askpass"
-          unset SSH_ASKPASS SSH_ASKPASS_REQUIRE
-        fi
-      fi
-    else
-      echo "WARNING: ssh-add not found; Git may prompt for the SSH key passphrase." >&2
-    fi
+    configure_github_ssh || return 1
   fi
 
   clone_or_update "lfric_apps" "$(repo_url "MetOffice/lfric_apps")" "$LFRIC_APPS_REF" "$LFRIC_APPS_DEPTH" \

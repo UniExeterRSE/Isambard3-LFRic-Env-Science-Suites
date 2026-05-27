@@ -4,10 +4,12 @@
 from spack.package import *
 
 
-class LfricAppsIsambard(BundlePackage):
+class LfricAppsIsambard(Package):
     """Bundle of LFRic Apps build/runtime dependencies for Isambard."""
 
     homepage = "https://github.com/MetOffice/lfric_apps"
+    has_code = False
+
     version("0.1.0")
 
     depends_on("mpich")
@@ -35,3 +37,7 @@ class LfricAppsIsambard(BundlePackage):
     depends_on("cylc-uiserver")
     depends_on("py-ansimarkup")
     depends_on("py-colorama")
+
+    def install(self, spec, prefix):
+        mkdirp(prefix)
+        touch(join_path(prefix, ".lfric-apps-isambard"))

@@ -44,6 +44,9 @@ Git source is checked before Spack starts fetching/building.
 
 To use HTTPS instead of SSH, set `USE_GITHUB_SSH=0` (and `GITHUB_TOKEN` or
 `GH_TOKEN` for private repos).
+With the default SSH mode, the installer can use a live SSH agent or call SSH
+directly with `GITHUB_SSH_KEY`. For non-interactive Slurm jobs using an
+encrypted key, export `GITHUB_SSH_PASSPHRASE` or use HTTPS with a GitHub token.
 
 Please note that you will need to use this installer for the time being to be
 able to use the environment as there are modifications that need to be made to
