@@ -2794,6 +2794,20 @@ EOF
   fi
   fix_papi_rocp_sdk_in_cache
 
+  # Re-check after concretize: on first run Spack clones ~/.spack/package_repos
+  # during concretize, so ensure_builtin_repo (called before concretize) finds
+  # only the remote URL, not a local path, and cannot apply the papi fix.
+  if [ -z "${BUILTIN_REPO_DIR:-}" ] && [ -d "$HOME/.spack/package_repos" ]; then
+    _yaml="$(find "$HOME/.spack/package_repos" -maxdepth 5 \
+      -path "*/repos/spack_repo/builtin/repo.yaml" -print -quit 2>/dev/null)"
+    [ -n "$_yaml" ] && BUILTIN_REPO_DIR="$(dirname "$_yaml")"
+    unset _yaml
+  fi
+  if [ -n "${BUILTIN_REPO_DIR:-}" ] && [ -d "$BUILTIN_REPO_DIR" ]; then
+    fix_builtin_papi_rocp_sdk "$BUILTIN_REPO_DIR"
+    fix_builtin_papi_tests "$BUILTIN_REPO_DIR"
+  fi
+
   if spack -e "$ENV_NAME" spec -I lfric-apps-isambard 2>/dev/null | grep -q "openmpi@"; then
     info "openmpi detected in environment; re-concretizing with --fresh to force mpich."
     if ! spack -e "$ENV_NAME" concretize -f -U; then
@@ -2801,6 +2815,10 @@ EOF
       return 1
     fi
     fix_papi_rocp_sdk_in_cache
+    if [ -n "${BUILTIN_REPO_DIR:-}" ] && [ -d "$BUILTIN_REPO_DIR" ]; then
+      fix_builtin_papi_rocp_sdk "$BUILTIN_REPO_DIR"
+      fix_builtin_papi_tests "$BUILTIN_REPO_DIR"
+    fi
   fi
 
   # Some netcdf-c builds probe for xml2-config even when DAP is disabled.
