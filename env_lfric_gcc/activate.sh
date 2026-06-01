@@ -86,8 +86,10 @@ export CORE_ROOT_DIR="${CORE_ROOT_DIR:-$WORKING_DIR/lfric_core}"
 export LFRIC_TARGET_PLATFORM="${LFRIC_TARGET_PLATFORM:-meto-spice}"
 export FPP="${FPP:-cpp -traditional-cpp}"
 
-# Configure the default Cylc run location to be user-specific under /projects/u35v.
-CYLC_RUN_BASE_ROOT="${CYLC_RUN_BASE_ROOT:-/projects/u35v}"
+# Configure the default Cylc run location under the project directory.
+# $PROJECTDIR is set by the system to the user's project space; fall back to
+# $SCRATCH or $HOME for users outside a project allocation.
+CYLC_RUN_BASE_ROOT="${CYLC_RUN_BASE_ROOT:-${PROJECTDIR:-${SCRATCH:-$HOME}}}"
 CYLC_RUN_BASE_DEFAULT="${CYLC_RUN_BASE_DEFAULT:-$CYLC_RUN_BASE_ROOT/${USER}/cylc-run}"
 export CYLC_RUN_BASE="${CYLC_RUN_BASE:-$CYLC_RUN_BASE_DEFAULT}"
 CYLC_USER_CONF="${CYLC_USER_CONF:-$HOME/.cylc/flow/global.cylc}"
