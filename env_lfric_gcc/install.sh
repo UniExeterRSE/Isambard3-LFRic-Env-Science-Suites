@@ -2473,8 +2473,10 @@ main() {
 
 
   BUILTIN_REPO_DIR=""
-  if [ -d "$HOME/.spack/package_repos" ]; then
-    builtin_repo_yaml="$(find "$HOME/.spack/package_repos" -maxdepth 5 -path "*/repos/spack_repo/builtin/repo.yaml" -print -quit 2>/dev/null)"
+  local _spack_user_cfg="${SPACK_USER_CONFIG_PATH:-$HOME/.spack}"
+  if [ -d "$_spack_user_cfg/package_repos" ]; then
+    local builtin_repo_yaml
+    builtin_repo_yaml="$(find "$_spack_user_cfg/package_repos" -maxdepth 5 -path "*/repos/spack_repo/builtin/repo.yaml" -print -quit 2>/dev/null)"
     if [ -n "$builtin_repo_yaml" ]; then
       BUILTIN_REPO_DIR="$(dirname "$builtin_repo_yaml")"
     fi
@@ -2775,7 +2777,7 @@ EOF
   - "${BUILTIN_REPO_DIR}"
 EOF
     else
-      warn "Unable to locate Spack builtin repo under $HOME/.spack/package_repos; py-jupyter-server may fail to resolve."
+      warn "Unable to locate Spack builtin repo under ${SPACK_USER_CONFIG_PATH:-$HOME/.spack}/package_repos; py-jupyter-server may fail to resolve."
     fi
     cat >> "$ENV_FILE" <<EOF
   packages:
@@ -2810,11 +2812,11 @@ EOF
   # Re-check after concretize: on first run Spack clones ~/.spack/package_repos
   # during concretize, so ensure_builtin_repo (called before concretize) finds
   # only the remote URL, not a local path, and cannot apply the papi fix.
-  if [ -z "${BUILTIN_REPO_DIR:-}" ] && [ -d "$HOME/.spack/package_repos" ]; then
-    _yaml="$(find "$HOME/.spack/package_repos" -maxdepth 5 \
+  if [ -z "${BUILTIN_REPO_DIR:-}" ] && [ -d "${SPACK_USER_CONFIG_PATH:-$HOME/.spack}/package_repos" ]; then
+    local _yaml
+    _yaml="$(find "${SPACK_USER_CONFIG_PATH:-$HOME/.spack}/package_repos" -maxdepth 5 \
       -path "*/repos/spack_repo/builtin/repo.yaml" -print -quit 2>/dev/null)"
     [ -n "$_yaml" ] && BUILTIN_REPO_DIR="$(dirname "$_yaml")"
-    unset _yaml
   fi
   if [ -n "${BUILTIN_REPO_DIR:-}" ] && [ -d "$BUILTIN_REPO_DIR" ]; then
     fix_builtin_papi_rocp_sdk "$BUILTIN_REPO_DIR"
