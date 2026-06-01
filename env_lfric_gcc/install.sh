@@ -30,32 +30,45 @@ configure_github_ssh() {
   local key="${GITHUB_SSH_KEY:-$HOME/.ssh/id_ed25519}"
   local tmp_ssh_askpass=""
 
+  # Check for a working SSH agent FIRST — covers agent-forwarding where the
+  # private key file lives only on the originating machine, not the HPC node.
+  if command -v ssh-add >/dev/null 2>&1 && [ -n "${SSH_AUTH_SOCK:-}" ]; then
+    if ssh-add -l >/dev/null 2>&1; then
+      # Agent has keys loaded; ensure first-time clones don't stall on host-key prompts.
+      if [ -z "${GIT_SSH_COMMAND:-}" ]; then
+        GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+        export GIT_SSH_COMMAND
+      fi
+      return 0
+    fi
+    warn "SSH_AUTH_SOCK is set but unusable; will try key-file or fresh agent."
+    unset SSH_AUTH_SOCK SSH_AGENT_PID
+  fi
+
+  # If the caller pre-set GIT_SSH_COMMAND, trust it completely.
+  # We don't know which key file to add to an agent, so stop here.
+  if [ -n "${GIT_SSH_COMMAND:-}" ]; then
+    return 0
+  fi
+
+  # No working agent and no pre-set command: we need a local key file.
   if [ ! -f "$key" ]; then
-    fail "SSH key not found at $key."
+    fail "SSH key not found at $key and no usable SSH agent."
     return 1
   fi
 
-  if [ -z "${GIT_SSH_COMMAND:-}" ]; then
-    GIT_SSH_COMMAND="ssh -i \"$key\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
-    if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ]; then
-      GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o BatchMode=yes"
-    fi
-    export GIT_SSH_COMMAND
+  GIT_SSH_COMMAND="ssh -i \"$key\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+  if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ]; then
+    GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o BatchMode=yes"
   fi
+  export GIT_SSH_COMMAND
 
   if ! command -v ssh-add >/dev/null 2>&1; then
     warn "ssh-add not found; Git will use GIT_SSH_COMMAND with $key."
     return 0
   fi
 
-  if [ -n "${SSH_AUTH_SOCK:-}" ]; then
-    if ssh-add -l >/dev/null 2>&1; then
-      return 0
-    fi
-    warn "SSH_AUTH_SOCK is set but unusable; starting a fresh agent if a passphrase is supplied."
-    unset SSH_AUTH_SOCK SSH_AGENT_PID
-  fi
-
+  # No working agent — prompt for passphrase on interactive terminals.
   if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ] && [ -t 0 ] && [ -t 1 ]; then
     printf 'Enter passphrase for %s: ' "$key" >/dev/tty
     IFS= read -r -s GITHUB_SSH_PASSPHRASE </dev/tty || true
