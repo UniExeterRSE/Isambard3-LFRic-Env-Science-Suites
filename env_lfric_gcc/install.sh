@@ -30,32 +30,45 @@ configure_github_ssh() {
   local key="${GITHUB_SSH_KEY:-$HOME/.ssh/id_ed25519}"
   local tmp_ssh_askpass=""
 
+  # Check for a working SSH agent FIRST — covers agent-forwarding where the
+  # private key file lives only on the originating machine, not the HPC node.
+  if command -v ssh-add >/dev/null 2>&1 && [ -n "${SSH_AUTH_SOCK:-}" ]; then
+    if ssh-add -l >/dev/null 2>&1; then
+      # Agent has keys loaded; ensure first-time clones don't stall on host-key prompts.
+      if [ -z "${GIT_SSH_COMMAND:-}" ]; then
+        GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+        export GIT_SSH_COMMAND
+      fi
+      return 0
+    fi
+    warn "SSH_AUTH_SOCK is set but unusable; will try key-file or fresh agent."
+    unset SSH_AUTH_SOCK SSH_AGENT_PID
+  fi
+
+  # If the caller pre-set GIT_SSH_COMMAND, trust it completely.
+  # We don't know which key file to add to an agent, so stop here.
+  if [ -n "${GIT_SSH_COMMAND:-}" ]; then
+    return 0
+  fi
+
+  # No working agent and no pre-set command: we need a local key file.
   if [ ! -f "$key" ]; then
-    fail "SSH key not found at $key."
+    fail "SSH key not found at $key and no usable SSH agent."
     return 1
   fi
 
-  if [ -z "${GIT_SSH_COMMAND:-}" ]; then
-    GIT_SSH_COMMAND="ssh -i \"$key\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
-    if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ]; then
-      GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o BatchMode=yes"
-    fi
-    export GIT_SSH_COMMAND
+  GIT_SSH_COMMAND="ssh -i \"$key\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+  if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ]; then
+    GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o BatchMode=yes"
   fi
+  export GIT_SSH_COMMAND
 
   if ! command -v ssh-add >/dev/null 2>&1; then
     warn "ssh-add not found; Git will use GIT_SSH_COMMAND with $key."
     return 0
   fi
 
-  if [ -n "${SSH_AUTH_SOCK:-}" ]; then
-    if ssh-add -l >/dev/null 2>&1; then
-      return 0
-    fi
-    warn "SSH_AUTH_SOCK is set but unusable; starting a fresh agent if a passphrase is supplied."
-    unset SSH_AUTH_SOCK SSH_AGENT_PID
-  fi
-
+  # No working agent — prompt for passphrase on interactive terminals.
   if [ -z "${GITHUB_SSH_PASSPHRASE:-}" ] && [ -t 0 ] && [ -t 1 ]; then
     printf 'Enter passphrase for %s: ' "$key" >/dev/tty
     IFS= read -r -s GITHUB_SSH_PASSPHRASE </dev/tty || true
@@ -2460,8 +2473,10 @@ main() {
 
 
   BUILTIN_REPO_DIR=""
-  if [ -d "$HOME/.spack/package_repos" ]; then
-    builtin_repo_yaml="$(find "$HOME/.spack/package_repos" -maxdepth 5 -path "*/repos/spack_repo/builtin/repo.yaml" -print -quit 2>/dev/null)"
+  local _spack_user_cfg="${SPACK_USER_CONFIG_PATH:-$HOME/.spack}"
+  if [ -d "$_spack_user_cfg/package_repos" ]; then
+    local builtin_repo_yaml
+    builtin_repo_yaml="$(find "$_spack_user_cfg/package_repos" -maxdepth 5 -path "*/repos/spack_repo/builtin/repo.yaml" -print -quit 2>/dev/null)"
     if [ -n "$builtin_repo_yaml" ]; then
       BUILTIN_REPO_DIR="$(dirname "$builtin_repo_yaml")"
     fi
@@ -2762,7 +2777,7 @@ EOF
   - "${BUILTIN_REPO_DIR}"
 EOF
     else
-      warn "Unable to locate Spack builtin repo under $HOME/.spack/package_repos; py-jupyter-server may fail to resolve."
+      warn "Unable to locate Spack builtin repo under ${SPACK_USER_CONFIG_PATH:-$HOME/.spack}/package_repos; py-jupyter-server may fail to resolve."
     fi
     cat >> "$ENV_FILE" <<EOF
   packages:
@@ -2794,6 +2809,20 @@ EOF
   fi
   fix_papi_rocp_sdk_in_cache
 
+  # Re-check after concretize: on first run Spack clones ~/.spack/package_repos
+  # during concretize, so ensure_builtin_repo (called before concretize) finds
+  # only the remote URL, not a local path, and cannot apply the papi fix.
+  if [ -z "${BUILTIN_REPO_DIR:-}" ] && [ -d "${SPACK_USER_CONFIG_PATH:-$HOME/.spack}/package_repos" ]; then
+    local _yaml
+    _yaml="$(find "${SPACK_USER_CONFIG_PATH:-$HOME/.spack}/package_repos" -maxdepth 5 \
+      -path "*/repos/spack_repo/builtin/repo.yaml" -print -quit 2>/dev/null)"
+    [ -n "$_yaml" ] && BUILTIN_REPO_DIR="$(dirname "$_yaml")"
+  fi
+  if [ -n "${BUILTIN_REPO_DIR:-}" ] && [ -d "$BUILTIN_REPO_DIR" ]; then
+    fix_builtin_papi_rocp_sdk "$BUILTIN_REPO_DIR"
+    fix_builtin_papi_tests "$BUILTIN_REPO_DIR"
+  fi
+
   if spack -e "$ENV_NAME" spec -I lfric-apps-isambard 2>/dev/null | grep -q "openmpi@"; then
     info "openmpi detected in environment; re-concretizing with --fresh to force mpich."
     if ! spack -e "$ENV_NAME" concretize -f -U; then
@@ -2801,6 +2830,10 @@ EOF
       return 1
     fi
     fix_papi_rocp_sdk_in_cache
+    if [ -n "${BUILTIN_REPO_DIR:-}" ] && [ -d "$BUILTIN_REPO_DIR" ]; then
+      fix_builtin_papi_rocp_sdk "$BUILTIN_REPO_DIR"
+      fix_builtin_papi_tests "$BUILTIN_REPO_DIR"
+    fi
   fi
 
   # Some netcdf-c builds probe for xml2-config even when DAP is disabled.
